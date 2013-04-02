@@ -1,0 +1,18 @@
+markdown: rdiscount
+pygments: true
+permalink: /posts/:year/:month/:title
+auto: false
+safe: true
+lsi: true
+rdiscount:
+  extensions: [smart]
+title : Anvar Karimson
+production_url : http://anvar.github.com
+description: "Througths, flamewars, utilities, tutorials, codes, projects and other things by Anvar Karimson."
+disqus_shortname:
+analytics: UA-268439-9
+gauges:
+author :
+  name : Anvar Karimson
+  github : anvar
+  twitter : anvarkarimson
