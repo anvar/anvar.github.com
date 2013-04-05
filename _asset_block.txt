@@ -1,0 +1,7 @@
+{% css_asset_tag global %}
+- /_assets/bootstrap.css
+- /_assets/custom.css
+- /_assets/bootstrap-responsive.css
+- /_assets/font-awesome.css
+- /_assets/pygments.css
+{% endcss_asset_tag %}
