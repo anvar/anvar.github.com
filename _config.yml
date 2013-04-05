@@ -1,7 +1,7 @@
 markdown: rdiscount
 pygments: true
 permalink: /posts/:year/:month/:title
-auto: true
+auto: false
 safe: false
 lsi: true
 rdiscount:
