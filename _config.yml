@@ -1,0 +1,17 @@
+title : Anvar Karimson
+description: "/dev/random"
+
+production_url : http://karimson.com
+url: "http://localhost:4000"
+
+exclude: [README.md, Rakefile]
+paginate: 16
+permalink: /posts/:title
+pygments: true
+
+author :
+  name : Anvar Karimson
+  github : anvar
+  twitter : anvarkarimson
+  linkedin : anvarkarimson
+  googleplus : 106304668058426538616

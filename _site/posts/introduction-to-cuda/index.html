@@ -1,0 +1,136 @@
+<!doctype html> 
+<html lang="en"> 
+<head>
+  <meta charset="utf-8">
+  <title>Anvar Karimson</title>
+  <meta name="author" content="Anvar Karimson">
+  <meta name="description" content="/dev/random">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <link rel="icon" href="http://localhost:4000/favicon.ico" />
+  <link rel="apple-touch-icon-precomposed" href="http://localhost:4000/apple-touch-icon.jpg" />
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="http://http://localhost:4000/atom.xml">
+  
+  <link rel="stylesheet" href="http://localhost:4000/assets/css/style.css" />
+  <link rel="stylesheet" href="http://localhost:4000/assets/css/solarizedlight.css">
+  <link rel="stylesheet" href="http://localhost:4000/assets/css/font-awesome.css">
+  <!--<link href='http://fonts.googleapis.com/css?family=Merriweather:400,700' rel='stylesheet' type='text/css'>-->
+</head>
+<body>
+<div class="wrap">
+<header class="mb">
+  <h1 class="h2 m-0"><a href="http://localhost:4000">Anvar Karimson</a></h1>
+  <ul class="navicons">
+    <li>
+      <a href="https://github.com/anvar" rel="nofollow" title="Github">
+        <i class="icon-github-sign icon-large left"></i>
+      </a>
+    </li>
+    <li>
+      <a href="https://www.linkedin.com/in/anvarkarimson" rel="nofollow" title="LinkedIn">
+        <i class="icon-linkedin-sign icon-large left"></i>
+      </a>
+    </li>
+    <li>
+      <a href="https://twitter.com/anvarkarimson" rel="nofollow" title="Twitter">
+        <i class="icon-twitter-sign icon-large left"></i>
+      </a>
+    </li>
+    <li>
+      <a href="/atom.xml" title="Atom Feed">
+        <i class="icon-rss icon-large left"></i>
+      </a>
+    </li>
+  </ul>
+  <br/>
+</header>
+
+<main>
+<article class="post">
+  <h1 class=""><a href="http://localhost:4000/posts/introduction-to-cuda" title="Introduction to CUDA">Introduction to CUDA</a></h1>
+  <p>GPUs; once strongly associated with gaming are now becoming common place in industry where frameworks like CUDA and OpenCL are exposing their power for general applications with serious need for computation. The key to their power is their parallelism. Where a standard CPU has between 4-8 cores, a GPU like the Nvidia GTX Titan readily comes with 2688 cores. The key, therefore, to successfully unlock their power is two-fold. The first part is to have an algorithm that can scale to the required level of parallelism. The second part, which may be less obvious, is to maximize GPU occupancy by carefully partitioning the computation to work with the hardware layout. In order to do that we must first look at what a GPU looks like at logical hardware level.</p>
+
+<p>The newest NVIDIA compute architecture is Kepler (compute capability 3.x), but here I will focus on a Fermi-based compute architecture (compute capability 2.x) as it is the one I have most familiarity with, and the one that Amazon EC2 uses in their Cluster GPU instance types.</p>
+
+<p>A Fermi-based GPU is based upon 16 Streaming Multiprocessors (SM) positioned around a common L2 cache, with each SM containing 32 cores, registers, and a small chunk of shared memory. Surrounding the SMs are six 64-bit memory partitions, for a 384-bit memory interface, supporting up to a total of 6GB of GDDR5 DRAM memory. The GigaScheduler provides a GPU-level scheduler distributing thread blocks to SMs internal schedulers, while the Host Interface connects through PCI-Express to the host system.</p>
+
+<p>Because an SM contains 32 cores it can, as such, only execute a maximum of 32 threads at any given time, which in CUDA-speak is called a warp. Every thread in a warp is executed in SIMD lockstep fashion, executing the same instruction but using its private registers to perform the requested operation. To get the most performance out of a GPU it is therefore important to understand warps, and how to write warp-friendly code. Warps are the primary way a GPU can hide latency, so if an operation will take a long time to perform - such as fetching from global memory - the warp scheduler will park the warp and schedule a different one. Once the memory access returns the warp will be rescheduled. By optimizing the memory access within warps the memory access can be coalesced with one call fetching data for several threads within the warp, and thus greatly reduce the overall cost of memory latency. Additionally, as the instructions are executed in lockstep, it is important to try to avoid conditional code which forces the threads within a warp to execute different branches as that can also have a significant impact on the time it takes to complete a warp.</p>
+
+<h2 id='programming_model'>Programming model</h2>
+
+<p>A program designed to run on a GPU is called a kernel, and in CUDA the level of parallelism for a kernel is defined by the grid size and the block size. The grid size defines the number of blocks and the shape of the cube that the blocks are distributed within. Ever since compute capability 2.0 the grid size can be specified in three dimensions, whilst in earlier versions being restricted to only two. The block size follows a similar model but has always had the ability to be specified in three dimensions.</p>
+<img src='http://localhost:4000/assets/img/cuda-grid.png' class='center caption' width='305' height='290' /><div class='caption'>Hello, Caption!</div>
+<h2 id='how_to_choose_size'>How to choose size</h2>
+
+<p>In general, outside of the maximum allowed dimensions for blocks and grids, you want to size your blocks/grid to match your data and simultaneously maximise occupancy, that is, how many threads are active at one time. The major factors influencing occupancy are shared memory usage, register usage, and thread block size. Another factor to consider is that threads get scheduled in warps, so a block size should always be a multiple of 32, otherwise at least one warp will be scheduled that is not making use of all the cores in the SM. Picking the right dimensions is somewhat of a black art, as it can be GPU/kernel/data shape/algorithm dependent. Sometimes, for example, it makes sense to perform a bit more work in an individual thread to minimize the number of blocks that need to be scheduled. Therefore it is always good to experiment with various sizes to see what the impact is on your specific kernel.</p>
+
+<p>When a thread is executing a kernel there are a few variables that CUDA exposes that can help with identifying which thread it is:</p>
+
+<ul>
+<li>gridDim.{x,y,z} - The dimensions of the grid</li>
+
+<li>blockDim.{x,y,z} - The dimensions of the block</li>
+
+<li>blockIdx.{x,y,z} - The index of the current block within the grid</li>
+
+<li>threadIdx.{x,y,z} - The index of the current thread with the block</li>
+</ul>
+
+<h2 id='cuda_hello_world'>CUDA Hello World</h2>
+<div class='highlight'><pre><code class='cuda'><span class='kr'>__global__</span> 
+<span class='kt'>void</span> <span class='nf'>helloKernel</span><span class='p'>(</span><span class='k'>const</span> <span class='kt'>float</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_in</span><span class='p'>,</span> <span class='kt'>int</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_out</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>unsigned</span> <span class='kt'>int</span> <span class='n'>n</span><span class='p'>)</span>
+<span class='p'>{</span>
+  <span class='c1'>// put this in a comment in the code instead</span>
+  <span class='kt'>unsigned</span> <span class='kt'>int</span> <span class='n'>global_id</span> <span class='o'>=</span> <span class='p'>(</span><span class='nb'>blockIdx</span><span class='p'>.</span><span class='n'>x</span> <span class='o'>*</span> <span class='nb'>blockDim</span><span class='p'>.</span><span class='n'>x</span><span class='p'>)</span> <span class='o'>+</span> <span class='nb'>threadIdx</span><span class='p'>.</span><span class='n'>x</span><span class='p'>;</span>
+
+  <span class='k'>if</span> <span class='p'>(</span><span class='n'>global_id</span> <span class='o'>&lt;</span> <span class='n'>n</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>g_out</span><span class='p'>[</span><span class='n'>global_id</span><span class='p'>]</span> <span class='o'>=</span> <span class='n'>g_in</span><span class='p'>[</span><span class='n'>global_id</span><span class='p'>]</span> <span class='o'>*</span> <span class='n'>g_in</span><span class='p'>[</span><span class='n'>global_id</span><span class='p'>];</span>
+  <span class='p'>}</span>
+<span class='p'>}</span>
+
+<span class='kt'>int</span> <span class='nf'>main</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>argc</span><span class='p'>,</span> <span class='kt'>char</span> <span class='o'>**</span><span class='n'>argv</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='n'>blockSize</span><span class='p'>(</span><span class='mi'>128</span><span class='p'>);</span>
+  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='n'>gridSize</span><span class='p'>(</span><span class='mi'>256</span><span class='p'>);</span>
+
+  <span class='k'>const</span> <span class='kt'>int</span> <span class='n'>number_of_elements</span> <span class='o'>=</span> <span class='mi'>10</span><span class='p'>;</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_in</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>float</span><span class='p'>[</span><span class='n'>number_of_elements</span><span class='p'>];</span>
+
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>d_in</span><span class='p'>;</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_in</span><span class='p'>,</span> <span class='mi'>2</span> <span class='o'>*</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>));</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMemcpy</span><span class='p'>(</span><span class='n'>d_in</span><span class='p'>,</span>
+                             <span class='n'>h_in</span><span class='p'>,</span>
+                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>,</span> 
+                             <span class='n'>cudaMemcpyHostToDevice</span><span class='p'>));</span>
+
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_out</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>float</span><span class='p'>[</span><span class='n'>number_of_elements</span><span class='p'>];</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>d_out</span><span class='p'>;</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_out</span><span class='p'>,</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>));</span>
+
+  <span class='n'>helloKernel</span><span class='o'>&lt;&lt;&lt;</span><span class='n'>gridSize</span><span class='p'>,</span> <span class='n'>blockSize</span><span class='o'>&gt;&gt;&gt;</span><span class='p'>(</span><span class='n'>d_in</span><span class='p'>,</span> <span class='n'>d_out</span><span class='p'>,</span> <span class='n'>number_of_elements</span><span class='p'>);</span>
+
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMemcpy</span><span class='p'>(</span><span class='n'>h_out</span><span class='p'>,</span>
+                             <span class='n'>d_out</span><span class='p'>,</span>
+                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>,</span> 
+                             <span class='n'>cudaMemcpyDeviceToHost</span><span class='p'>));</span>
+<span class='p'>}</span>
+</code></pre></div>
+  <p class="small gray"><time datetime="2013-08-26">26 August 2013</time></p>
+</article>
+</main>
+</div>
+<script type="text/javascript">
+
+var _gaq = _gaq || [];
+_gaq.push(['_setAccount', '']);
+_gaq.push(['_trackPageview']);
+
+(function() {
+  var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+  ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+  var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+})();
+
+</script>
+</body>
+</html>
+
