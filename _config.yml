@@ -9,6 +9,8 @@ paginate: 16
 permalink: /posts/:title
 pygments: true
 
+analytics: UA-268439-9
+
 author :
   name : Anvar Karimson
   github : anvar
