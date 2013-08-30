@@ -1,8 +1,8 @@
 title : Anvar Karimson
 description: "/dev/random"
 
-production_url : http://karimson.com
-url: "http://localhost:4000"
+#url: "http://localhost:4000"
+url: "http://karimson.com"
 
 exclude: [README.md, Rakefile]
 paginate: 16
@@ -14,4 +14,3 @@ author :
   github : anvar
   twitter : anvarkarimson
   linkedin : anvarkarimson
-  googleplus : 106304668058426538616

@@ -1,25 +1,26 @@
-<!doctype html> 
-<html lang="en"> 
+<!doctype html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Anvar Karimson</title>
   <meta name="author" content="Anvar Karimson">
   <meta name="description" content="/dev/random">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  
-  <link rel="icon" href="http://localhost:4000/favicon.ico" />
-  <link rel="apple-touch-icon-precomposed" href="http://localhost:4000/apple-touch-icon.jpg" />
-  <link rel="alternate" type="application/rss+xml" title="RSS" href="http://http://localhost:4000/atom.xml">
-  
-  <link rel="stylesheet" href="http://localhost:4000/assets/css/style.css" />
-  <link rel="stylesheet" href="http://localhost:4000/assets/css/solarizedlight.css">
-  <link rel="stylesheet" href="http://localhost:4000/assets/css/font-awesome.css">
-  <!--<link href='http://fonts.googleapis.com/css?family=Merriweather:400,700' rel='stylesheet' type='text/css'>-->
+
+  <link rel="icon" href="http://karimson.com/favicon.ico" />
+  <link rel="apple-touch-icon-precomposed" href="http://karimson.com/apple-touch-icon.jpg" />
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="http://http://karimson.com/atom.xml">
+
+  <link rel="stylesheet" href="http://karimson.com/assets/css/style.css" />
+  <link rel="stylesheet" href="http://karimson.com/assets/css/solarizedlight.css"/>
+  <link rel="stylesheet" href="http://karimson.com/assets/css/font-awesome.css"/>
+  <link href='http://fonts.googleapis.com/css?family=Merriweather:400,700' rel='stylesheet' type='text/css'/>
 </head>
 <body>
 <div class="wrap">
+
 <header class="mb">
-  <h1 class="h2 m-0"><a href="http://localhost:4000">Anvar Karimson</a></h1>
+  <h1 class="h2 m-0"><a href="http://karimson.com">Anvar Karimson</a></h1>
   <ul class="navicons">
     <li>
       <a href="https://github.com/anvar" rel="nofollow" title="Github">
@@ -37,7 +38,7 @@
       </a>
     </li>
     <li>
-      <a href="/atom.xml" title="Atom Feed">
+      <a href="http://karimson.com/atom.xml" title="Atom Feed">
         <i class="icon-rss icon-large left"></i>
       </a>
     </li>
@@ -47,19 +48,19 @@
 
 <main>
 <article class="post">
-  <h1 class=""><a href="http://localhost:4000/posts/introduction-to-cuda" title="Introduction to CUDA">Introduction to CUDA</a></h1>
-  <p>GPUs; once strongly associated with gaming are now becoming common place in industry where frameworks like CUDA and OpenCL are exposing their power for general applications with serious need for computation. The key to their power is their parallelism. Where a standard CPU has between 4-8 cores, a GPU like the Nvidia GTX Titan readily comes with 2688 cores. The key, therefore, to successfully unlock their power is two-fold. The first part is to have an algorithm that can scale to the required level of parallelism. The second part, which may be less obvious, is to maximize GPU occupancy by carefully partitioning the computation to work with the hardware layout. In order to do that we must first look at what a GPU looks like at logical hardware level.</p>
+  <h1 class=""><a href="http://karimson.com/posts/introduction-to-cuda" title="Introduction to CUDA">Introduction to CUDA</a></h1>
+  <p>GPUs; once strongly associated with gaming are now becoming common place in industry where frameworks like CUDA and OpenCL are exposing their power for general applications with serious needs for computation. The key to their power is their parallelism. Where a standard CPU has between 4-8 cores, a GPU like the Nvidia GTX Titan readily comes with 2688 cores. The key, therefore, to successfully unlock their power is two-fold. The first part is to have an algorithm that can scale to the required level of parallelism. The second part, which may be less obvious, is to maximize GPU occupancy by carefully partitioning the computation to work with the hardware layout. In order to do that we must first look at what a GPU looks like at logical hardware level.</p>
 
 <p>The newest NVIDIA compute architecture is Kepler (compute capability 3.x), but here I will focus on a Fermi-based compute architecture (compute capability 2.x) as it is the one I have most familiarity with, and the one that Amazon EC2 uses in their Cluster GPU instance types.</p>
-
+<img alt='Fermi-based GPU Hardware Layout' src='http://karimson.com/assets/img/hw-layout.png' class='center caption' width='568' height='338' /><div class='caption'>Fermi-based GPU Hardware Layout</div>
 <p>A Fermi-based GPU is based upon 16 Streaming Multiprocessors (SM) positioned around a common L2 cache, with each SM containing 32 cores, registers, and a small chunk of shared memory. Surrounding the SMs are six 64-bit memory partitions, for a 384-bit memory interface, supporting up to a total of 6GB of GDDR5 DRAM memory. The GigaScheduler provides a GPU-level scheduler distributing thread blocks to SMs internal schedulers, while the Host Interface connects through PCI-Express to the host system.</p>
-
+<img alt='Fermi Streaming Multiprocessor' src='http://karimson.com/assets/img/sm-layout.png' class='center caption' width='232' height='552' /><div class='caption'>Fermi Streaming Multiprocessor</div>
 <p>Because an SM contains 32 cores it can, as such, only execute a maximum of 32 threads at any given time, which in CUDA-speak is called a warp. Every thread in a warp is executed in SIMD lockstep fashion, executing the same instruction but using its private registers to perform the requested operation. To get the most performance out of a GPU it is therefore important to understand warps, and how to write warp-friendly code. Warps are the primary way a GPU can hide latency, so if an operation will take a long time to perform - such as fetching from global memory - the warp scheduler will park the warp and schedule a different one. Once the memory access returns the warp will be rescheduled. By optimizing the memory access within warps the memory access can be coalesced with one call fetching data for several threads within the warp, and thus greatly reduce the overall cost of memory latency. Additionally, as the instructions are executed in lockstep, it is important to try to avoid conditional code which forces the threads within a warp to execute different branches as that can also have a significant impact on the time it takes to complete a warp.</p>
 
 <h2 id='programming_model'>Programming model</h2>
 
 <p>A program designed to run on a GPU is called a kernel, and in CUDA the level of parallelism for a kernel is defined by the grid size and the block size. The grid size defines the number of blocks and the shape of the cube that the blocks are distributed within. Ever since compute capability 2.0 the grid size can be specified in three dimensions, whilst in earlier versions being restricted to only two. The block size follows a similar model but has always had the ability to be specified in three dimensions.</p>
-<img src='http://localhost:4000/assets/img/cuda-grid.png' class='center caption' width='305' height='290' /><div class='caption'>Hello, Caption!</div>
+<img src='http://karimson.com/assets/img/cuda-grid.png' class='center caption' width='376' height='283' /><div class='caption'>Possible arrangement of CUDA blocks and threads</div>
 <h2 id='how_to_choose_size'>How to choose size</h2>
 
 <p>In general, outside of the maximum allowed dimensions for blocks and grids, you want to size your blocks/grid to match your data and simultaneously maximise occupancy, that is, how many threads are active at one time. The major factors influencing occupancy are shared memory usage, register usage, and thread block size. Another factor to consider is that threads get scheduled in warps, so a block size should always be a multiple of 32, otherwise at least one warp will be scheduled that is not making use of all the cores in the SM. Picking the right dimensions is somewhat of a black art, as it can be GPU/kernel/data shape/algorithm dependent. Sometimes, for example, it makes sense to perform a bit more work in an individual thread to minimize the number of blocks that need to be scheduled. Therefore it is always good to experiment with various sizes to see what the impact is on your specific kernel.</p>
@@ -67,20 +68,37 @@
 <p>When a thread is executing a kernel there are a few variables that CUDA exposes that can help with identifying which thread it is:</p>
 
 <ul>
-<li>gridDim.{x,y,z} - The dimensions of the grid</li>
+<li><code>gridDim.{x,y,z}</code> - <em>The dimensions of the grid</em></li>
 
-<li>blockDim.{x,y,z} - The dimensions of the block</li>
+<li><code>blockDim.{x,y,z}</code> - <em>The dimensions of the block</em></li>
 
-<li>blockIdx.{x,y,z} - The index of the current block within the grid</li>
+<li><code>blockIdx.{x,y,z}</code> - <em>The index of the current block within the grid</em></li>
 
-<li>threadIdx.{x,y,z} - The index of the current thread with the block</li>
+<li><code>threadIdx.{x,y,z}</code> - <em>The index of the current thread with the block</em></li>
 </ul>
 
 <h2 id='cuda_hello_world'>CUDA Hello World</h2>
-<div class='highlight'><pre><code class='cuda'><span class='kr'>__global__</span> 
-<span class='kt'>void</span> <span class='nf'>helloKernel</span><span class='p'>(</span><span class='k'>const</span> <span class='kt'>float</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_in</span><span class='p'>,</span> <span class='kt'>int</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_out</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>unsigned</span> <span class='kt'>int</span> <span class='n'>n</span><span class='p'>)</span>
+
+<p>This is a simple example of how to write a CUDA program. It will take an input vector of integers and, with the help of a GPU, return an output vector consisting of the elements in the input vector times themselves. So the following input vector <code>[1, 2, 3, 4]</code> becomes <code>[1, 4, 9, 16]</code>. Below is the program in its entirety, and the following sections will drill down into more detail.</p>
+
+<p>To run the program make sure that the CUDA SDK is installed and that you can access the <code>nvcc</code> executable therein. Then execute the following lines in a terminal to compile and execute the program, given that the code is in a file named <code>hello.cu</code>.</p>
+<div class='highlight'><pre><code class='bash'>nvcc hello.cu -o hello.out
+./hello.out
+</code></pre></div><div class='highlight'><pre><code class='cuda'><span class='cp'>#include &lt;iostream&gt;</span>
+
+<span class='cp'>#define checkCudaErrors(val) check( (val), #val, __FILE__, __LINE__)</span>
+
+<span class='n'>template</span><span class='o'>&lt;</span><span class='kr'>typename</span> <span class='n'>T</span><span class='o'>&gt;</span>
+<span class='kt'>void</span> <span class='n'>check</span><span class='p'>(</span><span class='n'>T</span> <span class='n'>err</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>func</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>file</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>int</span> <span class='n'>line</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='k'>if</span> <span class='p'>(</span><span class='n'>err</span> <span class='o'>!=</span> <span class='n'>cudaSuccess</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cerr</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;CUDA error at: &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>file</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;:&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>line</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cerr</span> <span class='o'>&lt;&lt;</span> <span class='n'>cudaGetErrorString</span><span class='p'>(</span><span class='n'>err</span><span class='p'>)</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot; &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>func</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+    <span class='n'>exit</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>);</span>
+  <span class='p'>}</span>
+<span class='p'>}</span>
+
+<span class='kr'>__global__</span> <span class='kt'>void</span> <span class='n'>helloKernel</span><span class='p'>(</span><span class='k'>const</span> <span class='kt'>int</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_in</span><span class='p'>,</span> <span class='kt'>int</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_out</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>unsigned</span> <span class='kt'>int</span> <span class='n'>n</span><span class='p'>)</span>
 <span class='p'>{</span>
-  <span class='c1'>// put this in a comment in the code instead</span>
   <span class='kt'>unsigned</span> <span class='kt'>int</span> <span class='n'>global_id</span> <span class='o'>=</span> <span class='p'>(</span><span class='nb'>blockIdx</span><span class='p'>.</span><span class='n'>x</span> <span class='o'>*</span> <span class='nb'>blockDim</span><span class='p'>.</span><span class='n'>x</span><span class='p'>)</span> <span class='o'>+</span> <span class='nb'>threadIdx</span><span class='p'>.</span><span class='n'>x</span><span class='p'>;</span>
 
   <span class='k'>if</span> <span class='p'>(</span><span class='n'>global_id</span> <span class='o'>&lt;</span> <span class='n'>n</span><span class='p'>)</span> <span class='p'>{</span>
@@ -88,32 +106,124 @@
   <span class='p'>}</span>
 <span class='p'>}</span>
 
-<span class='kt'>int</span> <span class='nf'>main</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>argc</span><span class='p'>,</span> <span class='kt'>char</span> <span class='o'>**</span><span class='n'>argv</span><span class='p'>)</span> <span class='p'>{</span>
-  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='n'>blockSize</span><span class='p'>(</span><span class='mi'>128</span><span class='p'>);</span>
-  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='n'>gridSize</span><span class='p'>(</span><span class='mi'>256</span><span class='p'>);</span>
+<span class='kt'>int</span> <span class='n'>main</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>argc</span><span class='p'>,</span> <span class='kt'>char</span> <span class='o'>**</span><span class='n'>argv</span><span class='p'>)</span> <span class='p'>{</span>
 
-  <span class='k'>const</span> <span class='kt'>int</span> <span class='n'>number_of_elements</span> <span class='o'>=</span> <span class='mi'>10</span><span class='p'>;</span>
-  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_in</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>float</span><span class='p'>[</span><span class='n'>number_of_elements</span><span class='p'>];</span>
+  <span class='k'>const</span> <span class='kt'>int</span> <span class='n'>nr_of_elements</span> <span class='o'>=</span> <span class='mi'>10</span><span class='p'>;</span>
 
+  <span class='c1'>// initialize input array with dummy data</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_in</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>int</span><span class='p'>[</span><span class='n'>nr_of_elements</span><span class='p'>];</span>
+  <span class='k'>for</span> <span class='p'>(</span><span class='kt'>int</span> <span class='n'>i</span> <span class='o'>=</span> <span class='mi'>0</span><span class='p'>;</span> <span class='n'>i</span> <span class='o'>&lt;</span> <span class='n'>nr_of_elements</span><span class='p'>;</span> <span class='n'>i</span><span class='o'>++</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>h_in</span><span class='p'>[</span><span class='n'>i</span><span class='p'>]</span> <span class='o'>=</span> <span class='n'>i</span><span class='p'>;</span>
+  <span class='p'>}</span>
+
+  <span class='c1'>// allocate and copy input data to device</span>
   <span class='kt'>int</span> <span class='o'>*</span><span class='n'>d_in</span><span class='p'>;</span>
-  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_in</span><span class='p'>,</span> <span class='mi'>2</span> <span class='o'>*</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>));</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_in</span><span class='p'>,</span> <span class='mi'>2</span> <span class='o'>*</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>));</span>
   <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMemcpy</span><span class='p'>(</span><span class='n'>d_in</span><span class='p'>,</span>
                              <span class='n'>h_in</span><span class='p'>,</span>
-                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>,</span> 
+                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>,</span>
                              <span class='n'>cudaMemcpyHostToDevice</span><span class='p'>));</span>
 
-  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_out</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>float</span><span class='p'>[</span><span class='n'>number_of_elements</span><span class='p'>];</span>
+  <span class='c1'>// allocate array for output</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_out</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>int</span><span class='p'>[</span><span class='n'>nr_of_elements</span><span class='p'>];</span>
   <span class='kt'>int</span> <span class='o'>*</span><span class='n'>d_out</span><span class='p'>;</span>
-  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_out</span><span class='p'>,</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>));</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_out</span><span class='p'>,</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>));</span>
 
-  <span class='n'>helloKernel</span><span class='o'>&lt;&lt;&lt;</span><span class='n'>gridSize</span><span class='p'>,</span> <span class='n'>blockSize</span><span class='o'>&gt;&gt;&gt;</span><span class='p'>(</span><span class='n'>d_in</span><span class='p'>,</span> <span class='n'>d_out</span><span class='p'>,</span> <span class='n'>number_of_elements</span><span class='p'>);</span>
+  <span class='c1'>// dimensions of grid and blocks</span>
+  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='nf'>blockSize</span><span class='p'>(</span><span class='mi'>128</span><span class='p'>);</span>
+  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='nf'>gridSize</span><span class='p'>(</span><span class='mi'>256</span><span class='p'>);</span>
 
+  <span class='c1'>// run kernel</span>
+  <span class='n'>helloKernel</span><span class='o'>&lt;&lt;&lt;</span><span class='n'>gridSize</span><span class='p'>,</span> <span class='n'>blockSize</span><span class='o'>&gt;&gt;&gt;</span><span class='p'>(</span><span class='n'>d_in</span><span class='p'>,</span> <span class='n'>d_out</span><span class='p'>,</span> <span class='n'>nr_of_elements</span><span class='p'>);</span>
+
+  <span class='c1'>// copy output from device to host</span>
   <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMemcpy</span><span class='p'>(</span><span class='n'>h_out</span><span class='p'>,</span>
                              <span class='n'>d_out</span><span class='p'>,</span>
-                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>number_of_elements</span><span class='p'>,</span> 
+                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>,</span>
                              <span class='n'>cudaMemcpyDeviceToHost</span><span class='p'>));</span>
+
+  <span class='c1'>// print output array</span>
+  <span class='k'>for</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>i</span> <span class='o'>=</span> <span class='mi'>0</span><span class='p'>;</span> <span class='n'>i</span> <span class='o'>&lt;</span> <span class='n'>nr_of_elements</span><span class='p'>;</span> <span class='n'>i</span><span class='o'>++</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>h_out</span><span class='p'>[</span><span class='n'>i</span><span class='p'>]</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;,&quot;</span><span class='p'>;</span>
+  <span class='p'>}</span>
+  <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
 <span class='p'>}</span>
 </code></pre></div>
+<p>So lets drill down into the different parts that comprise this program to learn more about what they do.</p>
+<div class='highlight'><pre><code class='cuda'><span class='cp'>#define checkCudaErrors(val) check( (val), #val, __FILE__, __LINE__)</span>
+
+<span class='n'>template</span><span class='o'>&lt;</span><span class='kr'>typename</span> <span class='n'>T</span><span class='o'>&gt;</span>
+<span class='kt'>void</span> <span class='n'>check</span><span class='p'>(</span><span class='n'>T</span> <span class='n'>err</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>func</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>file</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>int</span> <span class='n'>line</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='k'>if</span> <span class='p'>(</span><span class='n'>err</span> <span class='o'>!=</span> <span class='n'>cudaSuccess</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cerr</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;CUDA error at: &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>file</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;:&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>line</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cerr</span> <span class='o'>&lt;&lt;</span> <span class='n'>cudaGetErrorString</span><span class='p'>(</span><span class='n'>err</span><span class='p'>)</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot; &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>func</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+    <span class='n'>exit</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>);</span>
+  <span class='p'>}</span>
+</code></pre></div>
+<p>First off is a utility function which is used to wrap any CUDA call to make sure that the call was successful. This is very important as we risk introducing garbage data into our calculation if continuing execution without verifying the result. There are a few ways to do this, this particular implementation was copied from the excellent Udacity course <a href='https://www.udacity.com/course/cs344'>CS344</a>, for a more detailed example look at <code>helper_cuda.h</code> in <code>${CUDA_SDK}/samples/common/inc</code>.</p>
+<div class='highlight'><pre><code class='cuda'><span class='kr'>__global__</span> <span class='kt'>void</span> <span class='nf'>helloKernel</span><span class='p'>(</span><span class='k'>const</span> <span class='kt'>int</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_in</span><span class='p'>,</span> <span class='kt'>int</span><span class='o'>*</span> <span class='k'>const</span> <span class='n'>g_out</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>unsigned</span> <span class='kt'>int</span> <span class='n'>n</span><span class='p'>)</span>
+<span class='p'>{</span>
+  <span class='kt'>unsigned</span> <span class='kt'>int</span> <span class='n'>global_id</span> <span class='o'>=</span> <span class='p'>(</span><span class='nb'>blockIdx</span><span class='p'>.</span><span class='n'>x</span> <span class='o'>*</span> <span class='nb'>blockDim</span><span class='p'>.</span><span class='n'>x</span><span class='p'>)</span> <span class='o'>+</span> <span class='nb'>threadIdx</span><span class='p'>.</span><span class='n'>x</span><span class='p'>;</span>
+
+  <span class='k'>if</span> <span class='p'>(</span><span class='n'>global_id</span> <span class='o'>&lt;</span> <span class='n'>n</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>g_out</span><span class='p'>[</span><span class='n'>global_id</span><span class='p'>]</span> <span class='o'>=</span> <span class='n'>g_in</span><span class='p'>[</span><span class='n'>global_id</span><span class='p'>]</span> <span class='o'>*</span> <span class='n'>g_in</span><span class='p'>[</span><span class='n'>global_id</span><span class='p'>];</span>
+  <span class='p'>}</span>
+<span class='p'>}</span>
+</code></pre></div>
+<p>Next up is the kernel. The kernel is the function that will be executed on the GPU and can be recognized by the <code>__global__</code> keyword, which means that it is callable from the host. A function can also be annotated with the <code>__device__</code> keyword which will make the function callable from either another <code>__device__</code> annotated function or a <code>__global__</code> annotated function but not from a function executing on the host. Our kernel in this case is very simple. In the arguments list we have two pointers to the global memory on the GPU. The first one, <code>g_in</code>, is for storing the input vector and the second, <code>g_out</code>, is for storing the output vector. The <code>g_</code> prefix is just a convention to indicate that the variables refer to the global memory as opposed to shared memory or local registers. Inside the kernel we calculate our global thread id, since the <code>threadIdx.x</code> is the thread index within a block we also need to account for the block that the thread belongs to. Another point worth mentioning is that we can have more threads than there are elements in the vector so we need to make sure that we do not overstep our memory bounderies. Finally we read from the global memory address designated by <code>g_in</code> and put the computed value in <code>g_out</code>.</p>
+
+<p>The <code>main</code> function is responsible for allocating memory on the GPU, transferring data forth and back, and do some rudimentary printing.</p>
+<div class='highlight'><pre><code class='cuda'>  <span class='k'>const</span> <span class='kt'>int</span> <span class='n'>nr_of_elements</span> <span class='o'>=</span> <span class='mi'>10</span><span class='p'>;</span>
+
+  <span class='c1'>// initialize input array with dummy data</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_in</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>int</span><span class='p'>[</span><span class='n'>nr_of_elements</span><span class='p'>];</span>
+  <span class='k'>for</span> <span class='p'>(</span><span class='kt'>int</span> <span class='n'>i</span> <span class='o'>=</span> <span class='mi'>0</span><span class='p'>;</span> <span class='n'>i</span> <span class='o'>&lt;</span> <span class='n'>nr_of_elements</span><span class='p'>;</span> <span class='n'>i</span><span class='o'>++</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>h_in</span><span class='p'>[</span><span class='n'>i</span><span class='p'>]</span> <span class='o'>=</span> <span class='n'>i</span><span class='p'>;</span>
+  <span class='p'>}</span>
+</code></pre></div>
+<p>The function starts off with creating an array and filling it with a sequence of integers.</p>
+<div class='highlight'><pre><code class='cuda'>  <span class='c1'>// allocate and copy input data to device</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>d_in</span><span class='p'>;</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_in</span><span class='p'>,</span> <span class='mi'>2</span> <span class='o'>*</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>));</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMemcpy</span><span class='p'>(</span><span class='n'>d_in</span><span class='p'>,</span>
+                             <span class='n'>h_in</span><span class='p'>,</span>
+                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>,</span>
+                             <span class='n'>cudaMemcpyHostToDevice</span><span class='p'>));</span>
+</code></pre></div>
+<p>Next we allocate memory on the device using <code>cudaMalloc</code> and as mentioned previously the call is wrapped with a call to <code>checkCudaErrors</code>. Similar to <code>malloc</code> the function takes a pointer, which will be populated with the address where the allocated memory resides, and the amount of memory we wish to allocate. We also copy the data generated in previous step to the device using <code>cudaMemcpy</code> with <code>cudaMemcpyHostToDevice</code> specifying the direction of the copy.</p>
+<div class='highlight'><pre><code class='cuda'>  <span class='c1'>// allocate array for output</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>h_out</span> <span class='o'>=</span> <span class='n'>new</span> <span class='kt'>int</span><span class='p'>[</span><span class='n'>nr_of_elements</span><span class='p'>];</span>
+  <span class='kt'>int</span> <span class='o'>*</span><span class='n'>d_out</span><span class='p'>;</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMalloc</span><span class='p'>(</span><span class='o'>&amp;</span><span class='n'>d_out</span><span class='p'>,</span> <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>));</span>
+</code></pre></div>
+<p>We also allocate memory on the GPU for the vector that will hold the results of our computations, and as expected there is no copy operation yet as we have not computed anything.</p>
+<div class='highlight'><pre><code class='cuda'>  <span class='c1'>// dimensions of grid and blocks</span>
+  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='nf'>blockSize</span><span class='p'>(</span><span class='mi'>128</span><span class='p'>);</span>
+  <span class='k'>const</span> <span class='kt'>dim3</span> <span class='nf'>gridSize</span><span class='p'>(</span><span class='mi'>256</span><span class='p'>);</span>
+</code></pre></div>
+<p>The block and grid size is defined using the struct <code>dim3</code>, which holds values for the x, y, and z dimensions. Any unspecified dimension is assumed to be <em>1</em>. In this particular case there will be 256 blocks, each containing 128 threads, and both blocks and grids will be arranged in a one-dimensional fashion along the x-axis. For this simple example the exact numbers are not of great importance, but as mentioned earlier, for a more complex kernel picking the right sizes can have a great impact on performance.</p>
+<div class='highlight'><pre><code class='cuda'>  <span class='c1'>// run kernel</span>
+  <span class='n'>helloKernel</span><span class='o'>&lt;&lt;&lt;</span><span class='n'>gridSize</span><span class='p'>,</span> <span class='n'>blockSize</span><span class='o'>&gt;&gt;&gt;</span><span class='p'>(</span><span class='n'>d_in</span><span class='p'>,</span> <span class='n'>d_out</span><span class='p'>,</span> <span class='n'>nr_of_elements</span><span class='p'>);</span>
+</code></pre></div>
+<p>We are finally ready to execute our kernel, and we pass along our grid and block sizes in the <code>&lt;&lt;&lt;&gt;&gt;&gt;</code> part. We also pass along the pointers to the memory we have allocated.</p>
+<div class='highlight'><pre><code class='cuda'>  <span class='c1'>// copy output from device to host</span>
+  <span class='n'>checkCudaErrors</span><span class='p'>(</span><span class='n'>cudaMemcpy</span><span class='p'>(</span><span class='n'>h_out</span><span class='p'>,</span>
+                             <span class='n'>d_out</span><span class='p'>,</span>
+                             <span class='k'>sizeof</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span> <span class='o'>*</span> <span class='n'>nr_of_elements</span><span class='p'>,</span>
+                             <span class='n'>cudaMemcpyDeviceToHost</span><span class='p'>));</span>
+
+  <span class='c1'>// print output array</span>
+  <span class='k'>for</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>i</span> <span class='o'>=</span> <span class='mi'>0</span><span class='p'>;</span> <span class='n'>i</span> <span class='o'>&lt;</span> <span class='n'>nr_of_elements</span><span class='p'>;</span> <span class='n'>i</span><span class='o'>++</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>h_out</span><span class='p'>[</span><span class='n'>i</span><span class='p'>]</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;,&quot;</span><span class='p'>;</span>
+  <span class='p'>}</span>
+  <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+<span class='p'>}</span>
+</code></pre></div>
+<p>After the kernel has finished we copy the results over from the GPU to our host by specifying the copy direction to be <code>cudaMemcpyDeviceToHost</code>, and print it to <code>stdout</code> before exiting.</p>
+
+<h2 id='final_remarks'>Final remarks</h2>
+
+<p>This is the first part of an ongoing series about GPU programming using CUDA, which will be mirroring my own progress as I learn more about the subject. It is primarily intended to be a place for me to organize the knowledge I have gathered but I do hope that it can be of some value for someone else. In the next part I will start looking at the parallel algorithms that form the basis for doing useful work on a GPU.</p>
   <p class="small gray"><time datetime="2013-08-26">26 August 2013</time></p>
 </article>
 </main>
