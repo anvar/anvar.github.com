@@ -11,7 +11,7 @@ A GPU has very different architecture than a CPU, and that with good reason. Ori
 Map
 ---
 
-First up is **map**, which is arguably one of the easier to understand conceptually. Orginating from functional programming languages, **map** takes an input list *i* and a function *f*, and creates a new list *o* by applying *f* to every element in *i*. Implementing **map** in CUDA is quite straightforward. Two memory locations will represent the input list and the output list, and a kernel will read from the input memory location, apply *f*, and write the result to the output memory location.
+First up is **map**, which is arguably one of the easier to understand conceptually. Orginating from functional programming languages, **map** takes an input list *i* and a function *f*, and creates a new list *o* by applying *f* to every element in *i*. Implementing **map** in CUDA is quite straightforward. Two memory locations will represent the input list and the output list, and each thread will read from the input memory location specified by its `thread_id`, apply *f*, and write the result to the corresponding output memory location. Because each thread has a specific input and output slot, there will no contention for memory access, and thus no need for any synchronization.
 
 <img src="{{ site.url }}/assets/img/algo-map.png" width="308" height="233" class="center caption"/>
 <div class="caption">A simple <strong>map</strong> that takes an input list, applies <code>f(x) = x + 2</code>, and writes the results to an output list</div>
