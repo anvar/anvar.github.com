@@ -34,9 +34,35 @@ The code is fairly straightforward, we read from `g_in`, apply the function `f(x
 Scatter
 -------
 
-asd
+**Scatter** can be seen as a variation on **map**, but instead of maintaining the one to one correspondence between input position and output position, **scatter** reads from one position and writes to one or many positions anywhere in the memory space. A simple implementation, like the one below, uses global memory for reading and writing, which makes it relatively slow due to the latency introduced by going to global memory. A more optimized version would use locality and shared memory to reduce the need for going to global memory and thus increase the performance.
+
+<img src="{{ site.url }}/assets/img/algo-scatter.png" width="307" height="233" class="center caption"/>
+<div class="caption">An example of a <strong>scatter</strong> that takes and input list and applies <code>f(x) += x</code>, and writes the result to two output locations</div>
+
+The following kernel implements the scenario described above.
+
+{% highlight cuda %}
+
+__global__ void scatterKernel(const int* const g_in, int* const g_out, const unsigned int n)
+{
+  unsigned int global_id = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+  if (global_id < n} {
+    atomicAdd(&g_out[global_id], g_in[global_id]);
+    atomicAdd(&g_out[global_id + 1], g_in[global_id]);
+  }
+}
+
+{% endhighlight %}
+
+Unfortunately there is a bit of complexity in the example above. Because we have two threads writing to the same location we need to properly synchronize when writing the result. The `atomicAdd` part will ensure that our updates processed in an atomic fashion and ensure the correctness of the operation. The rest of the code is hopefully quite straightforward.
 
 Gather
 ------
+
+as
+
+<img src="{{ site.url }}/assets/img/algo-gather.png" width="307" height="234" class="center caption"/>
+<div class="caption">Stuff</div>
 
 ad
