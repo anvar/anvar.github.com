@@ -6,7 +6,7 @@ category: posts
 
 *This is the second post in my ongoing series about programming a GPU using CUDA. In [my first post]({{ site.url}}/posts/introduction-to-cuda) I looked at the hardware architecture of a GPU, and how it influences the way CUDA programs are developed.*
 
-A GPU has very different architecture than a CPU, and that with good reason. Originally developed for speeding up computer graphic, GPU manufacturers quickly abandoned raw cycle speeds and instead focused increasing power by adding processing cores. The implications of that choice, and the massive parallelism that comes with it, is that an optimized sequential algorithm might yield very poor results in the performance department when deployed to a GPU, and the only way around it is to utilize algorithms that were designed from the ground up for parallelism.
+A GPU has very different architecture than a CPU, and that with good reason. Originally developed for speeding up computer graphics, GPU manufacturers quickly abandoned raw cycle speeds and instead focused on increasing power by adding processing cores. The implications of that choice, and the massive parallelism that comes with it, is that an optimized sequential algorithm might yield very poor results in the performance department when deployed to a GPU, and the only way around it is to utilize algorithms that were designed from the ground up for parallelism.
 
 Map
 ---
@@ -34,7 +34,7 @@ The code is fairly straightforward, we read from `g_in`, apply the function `f(x
 Scatter
 -------
 
-**Scatter** can be seen as a variation on **map**, but instead of maintaining the one to one correspondence between input position and output position, **scatter** reads from one position and writes to one or many positions anywhere in the memory space. A simple implementation, like the one below, uses global memory for reading and writing, which makes it relatively slow due to the latency introduced by going to global memory. A more optimized version would use locality and shared memory to reduce the need for going to global memory and thus increase the performance.
+**Scatter** can be seen as a variation on **map**, but instead of maintaining the one to one correspondence between input position and output position, **scatter** reads from one position and writes to one or many positions anywhere in the memory space. A simple implementation, like the one below, uses global memory for reading and writing which comes at a cost. The cost comes from the poor memory access pattern that a naive **scatter**, which can write to anywhere, exibits. In order to gain the maximum performance from a **scatter** shared memory and data locality needs to be take into consideration so that access to global memory is minimized.
 
 <img src="{{ site.url }}/assets/img/algo-scatter.png" width="307" height="233" class="center caption"/>
 <div class="caption">An example of a <strong>scatter</strong> that takes and input list and applies <code>f(x) += x</code>, and writes the result to two output locations</div>
@@ -60,9 +60,24 @@ Unfortunately there is a bit of complexity in the example above. Because we have
 Gather
 ------
 
-as
+A **gather** will, given a collection of indices and an indexable collection, generate an output collecton by reading in parallel from all the given locations. The main difference between a **map** and a **gather** is that the former holds a strict one to one correspondence between input and output location while a **gather** can read from any location, or even multiple locations, when generating the resulting collection. A naive **gather** suffers from the same problems as a naive **scatter** and can due to the memory access patterns incur heavy performance penelities by frequently going to global memory. The solution, as mentioned previously, would be to utilize memory locatity and shared memory to lessen the need for frequent roundtrips to global memory.
 
 <img src="{{ site.url }}/assets/img/algo-gather.png" width="307" height="234" class="center caption"/>
-<div class="caption">Stuff</div>
+<div class="caption">The <strong>gather</strong> in this case will read from multiple locations, sum the elements and write the result to the corresponding output location</div>
 
-ad
+The following kernel implements the scenario described above.
+
+{% highlight cuda %}
+
+__global__ void gatherKernel(const int* const g_in, int* const g_out, const unsigned int n)
+{
+  unsigned int global_id = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+  if ((global_id + 1) < n} {
+    g_out[global_id] = g_in[global_id] + g_in[global_id + 1];
+  }
+}
+
+{% endhighlight %}
+
+The reason the code sample above does not need synchronization even though the code is conceptually similar to the previous **scatter** example is because no concurrent mutation is occuring. Multiple threads are concurrently reading from the input memory location but as no modification is happing this is a completely safe operation. The result is then computed and written to a slot that is reserved for that particular thread.
