@@ -1,6 +1,6 @@
 ---
 layout: post
-title: Parallel Algorithms, Part 3
+title: Parallel Patterns, Part 4
 category: posts
 ---
 
