@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{{site.title}}</title>
+  <title>
+  {% if page.title == nil %}
+    {{site.title}}
+  {% else %}
+    {{page.title}} | {{site.title}}
+  {% endif %}
+  </title>
   <meta name="author" content="{{site.author.name}}">
   <meta name="description" content="{{site.description}}">
   <meta name="viewport" content="width=device-width, initial-scale=1">
