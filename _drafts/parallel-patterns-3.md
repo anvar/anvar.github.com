@@ -21,7 +21,136 @@ The parallel approach does come with a problem though; how do we communicate tha
 <img src="{{ site.url }}/assets/img/algo-reduce2.png" width="533" height="342" class="center caption"/>
 <div class="caption">Illustrating the kernel decomposition of a reduce operation</div>
 
+The code below implements a simple reduce that will sum an array of values. Although the code works, the implementation is far from optimal having interleaved addressing and divergent branching in the kernel. In a future blog post I will go through the process of optimizing a reduce operation, but for now lets focus on understanding the algorithm first.
+
+{% highlight cuda %}
+
+#include <iostream>
+
+#define checkCudaErrors(val) check( (val), #val, __FILE__, __LINE__)
+
+template<typename T>
+void check(T err, const char* const func, const char* const file, const int line) {
+  if (err != cudaSuccess) {
+    std::cerr << "CUDA error at: " << file << ":" << line << std::endl;
+    std::cerr << cudaGetErrorString(err) << " " << func << std::endl;
+    exit(1);
+  }
+}
+
+__global__ void reduceKernel(const long* const g_in, long* const g_out, const size_t n)
+{
+  extern __shared__ long s_data[];
+
+  unsigned int thread_id = threadIdx.x;
+  unsigned int global_id = (blockIdx.x * blockDim.x) + thread_id;
+
+  long x = 0;
+  if (global_id < n) {
+    x = g_in[global_id];
+  }
+  s_data[thread_id] = x;
+  __syncthreads();
+
+  for (unsigned int s = 1; s < blockDim.x; s *= 2) {
+    if (thread_id % (2 * s) == 0) {
+      s_data[thread_id] += s_data[thread_id + s];
+    }
+    __syncthreads();
+  }
+
+  if (thread_id == 0) {
+    g_out[blockIdx.x] = s_data[0];
+  }
+}
+
+int main(int argc, char **argv) {
+
+  const int N = 100000;
+
+  // dimensions of grid and blocks
+  const dim3 blockSize(256);
+  const dim3 gridSize(ceil(N/ ((float) blockSize.x)));
+
+  unsigned int v = gridSize.x;
+
+  v--;
+  v |= v >> 1;
+  v |= v >> 2;
+  v |= v >> 4;
+  v |= v >> 8;
+  v |= v >> 16;
+  v++;
+
+  const dim3 gridSize2(v);
+
+  // initialize input array with dummy data
+  long *h_in = new long[N];
+  for (int i = 0; i < N; i++) {
+    h_in[i] = i;
+  }
+
+  // allocate and copy input data to device
+  long *d_in;
+  checkCudaErrors(cudaMalloc(&d_in, sizeof(long) * N));
+  checkCudaErrors(cudaMemcpy(d_in, h_in, sizeof(long) * N, cudaMemcpyHostToDevice));
+
+  // allocate device memory for intermediate results
+  long *d_out;
+  checkCudaErrors(cudaMalloc(&d_out, sizeof(long) * gridSize.x));
+
+  // allocate device memory for final result
+  long *h_result = new long[1];
+  long *d_result;
+  checkCudaErrors(cudaMalloc(&d_result, sizeof(long)));
+
+  reduceKernel<<<gridSize, blockSize, blockSize.x * sizeof(long)>>>(d_in, d_out, N);
+  checkCudaErrors(cudaGetLastError());
+
+  reduceKernel<<<1, gridSize2,  gridSize2.x * sizeof(long)>>>(d_out, d_result, gridSize.x);
+  checkCudaErrors(cudaGetLastError());
+
+  // copy output from device to host
+  checkCudaErrors(cudaMemcpy(h_result, d_result, sizeof(long), cudaMemcpyDeviceToHost));
+
+  // print output array
+  std::cout << "Sum: " << h_result[0] << std::endl;
+}
+
+{% endhighlight %}
+
+The code block starts off with the usual `define` and utility function for CUDA error checking. In my [introduction to CUDA]({{ site.url }}/posts/introduction-to-cuda/), I go through the function and its purpose in more detail so I will not repeat it here.
+
+{% highlight cuda %}
+__global__ void reduceKernel(const long* const g_in, long* const g_out, const size_t n)
+{
+  extern __shared__ long s_data[];
+{% endhighlight %}
+
+Next up is the kernel, which begins by defining a pointer to some shared memory. Shared memory differs from global memory in that it sits directly on the multiprocessors themselves. This greatly reduces the memory access latency but also means that threads from different thread blocks are unable to access the same shared memory. I am using the unsized declaration of the shared memory here which allows me to specify the amount of shared memory when launching the kernel as opposed to during compile time, which is specified by the third kernel launch parameter, like so `reduceKernel<<<gridSize, blockSize, sharedMemorySize>>>(..);`. The shared memory will act as a temporary cache for speeding up our reduction, and allows us to avoid going to global memory every iteration.
+
+{% highlight cuda %}
+long x = 0;
+if (global_id < n) {
+  x = g_in[global_id];
+}
+s_data[thread_id] = x;
+__syncthreads();
+{% endhighlight %}
+
+The first stage of the algorithm is to transfer the input data from global memory to shared memory to speed up any subsequent access. If the input data cannot fully occupy the shared memory space the extra memory slots are zeroed out to prevent them from interfering with the calculation. Before proceeding to the actual calculation we want to make sure that all input data we need has been transferred, otherwise the result might not be what we expect it to be. `__syncthreads()` creates a barrier forcing all threads in a block to reach the barrier before any of them can continue, which means that once we are past the barrier we can be sure that the data we need has been transferred.
+
+{% highlight cuda %}
+for (unsigned int s = 1; s < blockDim.x; s *= 2) {
+  if (thread_id % (2 * s) == 0) {
+    s_data[thread_id] += s_data[thread_id + s];
+  }
+  __syncthreads();
+}
+{% endhighlight %}
 
 
-* Performance caviets
-* Code
+Before continuing going through the code it might be good to step back and understand exactly what it is that the algorithm is doing.
+
+<img src="{{ site.url }}/assets/img/algo-reduce3.png" width="543" height="396" class="center caption"/>
+<div class="caption">Visualising summing elements in a list using reduce.<br/><i>(The numbers in the circles represent the thread id.)</i></div>
