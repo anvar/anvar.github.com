@@ -32,9 +32,17 @@ __global__ void reduceKernel(const long* const g_in, long* const g_out, const si
   //  __syncthreads();
   //}
 
-  for (unsigned int s = 1; s < blockDim.x; s *= 2) {
-    if (thread_id % (2 * s) == 0) {
-      s_data[thread_id] += s_data[thread_id + s];
+  // for (unsigned int s = 1; s < blockDim.x; s *= 2) {
+  //   if (thread_id % (2 * s) == 0) {
+  //     s_data[thread_id] += s_data[thread_id + s];
+  //   }
+  //   __syncthreads();
+  // }
+
+  for (unsigned int distance = 1; distance < blockDim.x; distance *= 2) {
+    bool is_active = (thread_id % (2 * distance) == 0);
+    if (is_active) {
+      s_data[thread_id] += s_data[thread_id + distance];
     }
     __syncthreads();
   }
@@ -54,6 +62,7 @@ int main(int argc, char **argv) {
 
   unsigned int v = gridSize.x;
 
+  // see http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
   v--;
   v |= v >> 1;
   v |= v >> 2;
@@ -76,23 +85,23 @@ int main(int argc, char **argv) {
   checkCudaErrors(cudaMemcpy(d_in, h_in, sizeof(long) * nr_of_elements, cudaMemcpyHostToDevice));
 
   // allocate device memory for intermediate results
-  long *d_out;
-  checkCudaErrors(cudaMalloc(&d_out, sizeof(long) * gridSize.x));
+  long *d_intermediate;
+  checkCudaErrors(cudaMalloc(&d_intermediate, sizeof(long) * gridSize.x));
 
-  long *h_result = new long[1];
-  long *d_result;
-  checkCudaErrors(cudaMalloc(&d_result, sizeof(long)));
+  long *h_out = new long[1];
+  long *d_out;
+  checkCudaErrors(cudaMalloc(&d_out, sizeof(long)));
 
   // run kernel
-  reduceKernel<<<gridSize, blockSize, blockSize.x * sizeof(long)>>>(d_in, d_out, nr_of_elements);
+  reduceKernel<<<gridSize, blockSize, blockSize.x * sizeof(long)>>>(d_in, d_intermediate, nr_of_elements);
   checkCudaErrors(cudaGetLastError());
 
-  reduceKernel<<<1, gridSize2,  gridSize2.x * sizeof(long)>>>(d_out, d_result, gridSize.x);
+  reduceKernel<<<1, gridSize2,  gridSize2.x * sizeof(long)>>>(d_intermediate, d_out, gridSize.x);
   checkCudaErrors(cudaGetLastError());
 
   // copy output from device to host
-  checkCudaErrors(cudaMemcpy(h_result, d_result, sizeof(long), cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(h_out, d_out, sizeof(long), cudaMemcpyDeviceToHost));
 
   // print output array
-  std::cout << "Sum: " << h_result[0] << std::endl;
+  std::cout << "Sum: " << h_out[0] << std::endl;
 }
