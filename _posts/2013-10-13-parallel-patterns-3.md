@@ -11,7 +11,7 @@ Reduce
 
 *Reduce* is interesting because it is the first parallel pattern we examine that requires cooperation between processors, where some of the sub-computation needs to be completed before the algorithm can proceed. At its core *reduce* takes two inputs. The first one is a set of elements to be reduced, and the second one is a reduction operator. The operator needs to be both binary, taking two inputs and producing one output, and associative where the order of the operations does not matter as long as the order of the operands is not changed. A good example of a valid operator would be *plus*, as it can take two inputs and produce one output, and it is also associative in that *(1 + 2) + 3 == 1 + (2 + 3)*.
 
-When performing a serial *reduce*, every step of the computation is dependent on the previous one. This creates a problem when trying to parallelise the algorithm. If every computation is dependent on the result of the previous computation, then the algorithm is intrinisically not able to run any faster regardless of the number of threads we throw at it. The key lies in the associative nature of the reduction operator, which allows us to reorder the operations as long as the order of the operands is not changed. What this means in practise is that we can think of our reduction like a tree where threads can work on their individual part of the computation independently.
+When performing a serial *reduce*, every step of the computation is dependent on the previous one. This creates a problem when trying to parallelize the algorithm. If every computation is dependent on the result of the previous computation, the algorithm is intrinisically not able to run any faster regardless of the number of threads we throw at it. The key lies in the associative nature of the reduction operator, which allows us to reorder the operations as long as the order of the operands is not changed. What this means in practice is that we can think of our reduction like a tree where threads can work on their individual part of the computation independently.
 
 <img src="{{ site.url }}/assets/img/algo-reduce1.png" width="435" height="265" class="center caption"/>
 <div class="caption">A tree-based approach of performing a <i>reduce</i> over a set of integers</div>
@@ -21,7 +21,7 @@ The parallel approach does come with a problem though; how do we communicate tha
 <img src="{{ site.url }}/assets/img/algo-reduce2.png" width="533" height="342" class="center caption"/>
 <div class="caption">Illustrating the kernel decomposition of a <i>reduce</i> operation</div>
 
-The code below implements a simple *reduce* that will sum an array of values. Although the code works, the implementation is far from optimal with plenty of potential for improvement that can hopefully be covered in a future blog post. For now, lets focus on understanding the algorithm first.
+The code below implements a simple *reduce* that will sum an array of values. Although the code works, the implementation is far from optimal with plenty of potential for improvement. For now, lets focus on understanding the algorithm first.
 
 {% highlight cuda %}
 #include <iostream>
@@ -127,7 +127,7 @@ __global__ void reduceKernel(const long* const g_in, long* const g_out, const si
   extern __shared__ long s_data[];
 {% endhighlight %}
 
-Next up is the kernel, which begins by defining a pointer to some shared memory. Shared memory differs from global memory in that it sits directly on the multiprocessors themselves. This greatly reduces the memory access latency but also means that threads from different thread blocks are unable to access the same shared memory. I am using the unsized declaration of the shared memory here, which allows me to specify the amount of shared memory when launching the kernel, and is specified by the third kernel launch parameter, like so
+Next up is the kernel, which begins by defining a pointer to some shared memory. Shared memory differs from global memory in that it sits directly on the multiprocessors themselves. This greatly reduces the memory access latency but also means that threads from different thread blocks are unable to access the same shared memory. I am using the unsized declaration of the shared memory here, which allows me to specify the amount of shared memory when launching the kernel, and is specified by the third kernel launch parameter, like so:
 
 {% highlight cuda %}
 reduceKernel<<<gridSize, blockSize, sharedMemorySize>>>(..);
@@ -160,10 +160,10 @@ if (thread_id == 0) {
 }
 {% endhighlight %}
 
-The algorithm divides the threads into active threads and inactive threads. An active thread is responsible for adding the value of the next subsequent inactive thread, defined by a *distance*, to their own. The *distance* starts at *1* and is doubled every iteration, which means that the number of threads need to be a power of two so that every time the distance is doubled it provides the same number of active and inactive threads. Finally the calculated sum is written to the output memory location indicated by the block id. Although the algorithm might sound complicated it is in fact quite straightforward. The figure below might provide a better illustration of how the algorithm works.
+The algorithm divides the threads into active threads and inactive threads. An active thread is responsible for adding the value of the next subsequent inactive thread, as defined by *distance*, to their own. The *distance* starts at *1* and is doubled every iteration, which means that the number of threads need to be a power of two so that every time the distance is doubled it provides the same number of active and inactive threads. Finally the calculated sum is written to the output memory location indicated by the block id. Although the algorithm might sound complicated it is in fact quite straightforward. The figure below might provide a better illustration of how the algorithm works.
 
 <img src="{{ site.url }}/assets/img/algo-reduce3.png" width="543" height="396" class="center caption"/>
-<div class="caption">Visualising summing elements in a list using <i>reduce</i>.<br/><i>(The numbers in the circles represent the thread id)</i></div>
+<div class="caption">Visualizing summing elements in a list using <i>reduce</i>.<br/><i>(The numbers in the circles represent the thread id)</i></div>
 
 Although the algorithm produces the right result, as you can imagine, the implementation is far from optimal with problems such poor data locality and branch divergence. I hope to be able to go through the process of optimizing this kernel in a future blog post, but for now lets take a look at some things we have to do before launching the algorithm.
 
@@ -185,7 +185,7 @@ v++;
 const dim3 gridSize2(v);
 {% endhighlight %}
 
-The first two lines should be quite familar by now, but the lines following them might look a bit strange. Earlier, when going through the kernel algorithm, I mentioned that it was important that the number of threads used needed to be a power of two. We ensure that this is the case for the first kernel launch by using a fixed amount of threads and varying the number of blocks instead. The second kernel launch, however, cannot have a fixed number of threads as it needs at least one thread for each block, and because the number of blocks is dependent on the number of values we cannot know at compile time how many threads we need. In order to get the right amount of threads we first need to take the number of blocks and then round that number up to the nearest number that is a power of two, i.e. *205* becomes *256*. I am not going to go in to too much detail about how the rounding process works, but for more information and other interesting bit twiddling hacks check out [bithacks](http://graphics.stanford.edu/~seander/bithacks.html‎). With the rounding in place we can be certain that we will have a correct number of threads for launching the kernel the second time.
+The first two lines should be quite familiar by now, but the lines following them might look a bit strange. Earlier, when going through the kernel algorithm, I mentioned that it was important that the number of threads used needed to be a power of two. We ensure that this is the case for the first kernel launch by using a fixed amount of threads and varying the number of blocks instead. The second kernel launch, however, cannot have a fixed number of threads as it needs at least one thread for each block, and because the number of blocks is dependent on the number of values we cannot know at compile time how many threads we need. In order to get the right amount of threads we first need to take the number of blocks and then round that number up to the nearest number that is a power of two, i.e. *205* becomes *256*. I am not going to go in to too much detail about how the rounding process works, but for more information and other interesting bit twiddling hacks check out [bithacks](http://graphics.stanford.edu/~seander/bithacks.html‎). With the rounding in place we can be certain that we will have a correct number of threads for launching the kernel the second time.
 
 {% highlight cuda %}
 // initialize input array with data ranging from [0,nr_of_elements)
@@ -223,4 +223,4 @@ checkCudaErrors(cudaMemcpy(h_out, d_out, sizeof(long), cudaMemcpyDeviceToHost));
 std::cout << "Sum: " << h_out[0] << std::endl;
 {% endhighlight %}
 
-Finally we are ready to launch the kernels, with the results of the first invocation used as input data to the second one. After both kernels have executed the total sum is then transfered back to the host and printed to `stdout`, which concludes our reduction example.
+Finally we are ready to launch the kernels, with the results of the first invocation used as input data to the second one. After both kernels have executed the total sum is then transferred back to the host and printed to `stdout`, which concludes our reduction example.
